@@ -86,6 +86,17 @@ Après la fin de la partie, le serveur et les clients ferment leurs sockets et l
 - Autre mode de jeu : Permettre à un seul client de jouer contre l'ordinateur aux échecs.
 - Challenge dans le jeu : Ajouter un temps de jeu limité pour chaque joueur.
 
+## Licence des polices
+
+Ce projet utilise la police "Liberation Sans".
+
+- Police : Liberation Sans
+- Licence : SIL Open Font License 1.1
+
+Le fichier de licence complet est disponible dans le dépôt (SIL Open Font License.txt).
+
+Copyright (c) Red Hat, Inc.
+
 ## Auteurs
 
 Ce projet a été développé par moi-même, Adrien PANGUEL, dans le cadre d'un projet académique, que j'ai poursuivi pour apporter les dernières finitions, notamment la possibilité de rejouer des parties à l'infini.
