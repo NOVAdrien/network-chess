@@ -488,7 +488,7 @@ void handle_game_over(SDL_Renderer *renderer) {
     printf("open handle game over\n");
     SDL_Color text_color = {255, 255, 255, 255}; // Couleur du texte (blanc)
     SDL_Color bg_color = {0, 0, 0, 255}; // Couleur de fond (noir)
-    TTF_Font *font = TTF_OpenFont("arial.ttf", 24); // Charger une police (assurez-vous d'avoir une police TTF)
+    TTF_Font *font = TTF_OpenFont("LiberationSans-Regular.ttf", 24); // Charger une police (assurez-vous d'avoir une police TTF)
 
     if (!font) {
         printf("Erreur lors du chargement de la police: %s\n", TTF_GetError());
@@ -989,7 +989,7 @@ void start_client(const char *server_ip) {
     }
 
     // Ensuite, vous pouvez charger une police
-    TTF_Font *font = TTF_OpenFont("arial.ttf", 24);
+    TTF_Font *font = TTF_OpenFont("LiberationSans-Regular.ttf", 24);
     if (!font) {
         printf("Erreur lors du chargement de la police: %s\n", TTF_GetError());
         return; // Ou exit(EXIT_FAILURE);
