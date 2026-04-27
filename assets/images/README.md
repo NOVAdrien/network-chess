@@ -5,18 +5,18 @@ This directory contains the chess piece images used by the client for rendering.
 ## Files
 
 ```text
-black_bishop.webp
-black_king.webp
-black_knight.webp
-black_pawn.webp
-black_queen.webp
-black_rook.webp
-white_bishop.webp
-white_king.webp
-white_knight.webp
-white_pawn.webp
-white_queen.webp
-white_rook.webp
+black_bishop.png
+black_king.png
+black_knight.png
+black_pawn.png
+black_queen.png
+black_rook.png
+white_bishop.png
+white_king.png
+white_knight.png
+white_pawn.png
+white_queen.png
+white_rook.png
 ```
 
 ## Source
@@ -34,5 +34,5 @@ Full license details, attribution, and modification information are provided in:
 
 ## Notes
 
-Images have been converted from SVG to .webp format for performance and size optimization.
+Images have been converted from SVG to .png format for performance and size optimization.
 All images in this directory share the same origin and license.
