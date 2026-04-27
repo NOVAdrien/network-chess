@@ -34,5 +34,5 @@ Full license details, attribution, and modification information are provided in:
 
 ## Notes
 
-Images have been converted from SVG to .webp format for performance and size optimization.
+Images have been converted from SVG to .png format for performance and size optimization.
 All images in this directory share the same origin and license.
