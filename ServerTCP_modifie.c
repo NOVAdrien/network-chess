@@ -68,7 +68,7 @@ bool is_king_in_check();
 bool is_checkmate();
 bool is_castling_valid(int piece, int end_col);
 void reverse_board(int board[BOARD_SIZE][BOARD_SIZE]);
-bool handle_move_from_client();
+bool handle_move_from_client(int player_socket);
 int get_promotion_piece(int piece, int requested_piece);
 ssize_t send_all(int socket_fd, const void *buffer, size_t length);
 ssize_t recv_all(int socket_fd, void *buffer, size_t length);
@@ -342,43 +342,72 @@ bool is_valid_king_move(int start_row, int start_col, int end_row, int end_col) 
 
 // Fonction pour vérifier les déplacements des pions
 bool is_valid_pawn_move(int start_row, int start_col, int end_row, int end_col, int piece) {
-    // Déplacer d'une ou deux cases en avant si elles sont vides
+    int direction;
+    int initial_row;
+    int en_passant_row;
+    int en_passant_capture_row;
+
+    if (piece == 1) { // Pion blanc
+        direction = -1;
+        initial_row = 6;
+        en_passant_row = 3;
+        en_passant_capture_row = 2;
+    } else if (piece == 7) { // Pion noir
+        direction = 1;
+        initial_row = 1;
+        en_passant_row = 4;
+        en_passant_capture_row = 5;
+    } else {
+        return false;
+    }
+
+    // Déplacement d'une case vers l'avant
     if (start_col == end_col && game_state.board[end_row][end_col] == 0) {
-        if (end_row - start_row == -1) {
-            return true; // Une case
-        } else if (end_row - start_row == -2) {
-            if (start_row == 6 && game_state.board[5][start_col] == 0) {
+        if (end_row - start_row == direction) {
+            return true;
+        }
+
+        // Déplacement de deux cases depuis la position initiale
+        if (start_row == initial_row && end_row - start_row == 2 * direction) {
+            int intermediate_row = start_row + direction;
+
+            if (game_state.board[intermediate_row][start_col] == 0) {
                 if (piece == 1) {
                     game_state.en_passant_blanc = end_col;
-                    //printf("en_passant_blanc = %d\n", game_state.en_passant_blanc);
-                    return true; // Premier mouvement du pion blanc de 2 cases
+                    return true;
                 } else if (piece == 7) {
                     game_state.en_passant_noir = end_col;
-                    //printf("en_passant_noir = %d\n", game_state.en_passant_noir);
-                    return true; // Premier mouvement du pion noir de 2 cases
+                    return true;
                 }
             }
         }
     }
 
-    // Capturer en diagonale : on est certain que la pièce en diagonale n'est pas une pièce alliée
+    // Capture diagonale normale
     if (game_state.board[end_row][end_col] != 0 && abs(end_col - start_col) == 1) {
-        if ((piece == 1 || piece == 7) && end_row - start_row == -1) {
-            return true; // Mouvement en diagonal d'une case qui capture une pièce adverse
+        if (end_row - start_row == direction) {
+            return true;
         }
     }
 
-    // Capturer en passant
-    if (game_state.board[end_row][end_col] == 0 && start_row == 3 && end_row == 2 && abs(end_col - start_col) == 1) {
+    // Capture en passant
+    if (game_state.board[end_row][end_col] == 0 &&
+        start_row == en_passant_row &&
+        end_row == en_passant_capture_row &&
+        abs(end_col - start_col) == 1) {
+
         if (piece == 1 && end_col == game_state.en_passant_noir) {
             game_state.board[start_row][end_col] = 0;
+            game_state.capture_en_passant_blanc = true;
             return true;
         } else if (piece == 7 && end_col == game_state.en_passant_blanc) {
             game_state.board[start_row][end_col] = 0;
+            game_state.capture_en_passant_noir = true;
             return true;
         }
     }
-    return false; // Le mouvement n'est pas possible pour un pion
+
+    return false;
 }
 
 // Fonction pour vérifier si un déplacement est valide pour la pièce et la destination sélectionnées
@@ -498,7 +527,7 @@ bool is_castling_valid(int piece, int end_col) {
         return false;
     }
 
-    int start_row = 7;
+    int start_row = (piece == 6) ? 7 : 0;
 
     if (piece == 6 && !white_king_moved) { // Roi blanc
         // Roque court (roi vers la droite)
@@ -552,7 +581,7 @@ bool is_castling_valid(int piece, int end_col) {
                 game_state.board[start_row][2] = 0;
             }
         }
-    } else if (piece == 12 && !black_king_moved) { // Roi blanc
+    } else if (piece == 12 && !black_king_moved) { // Roi noir
         // Roque court (roi vers la droite)
         if (end_col == 6 && game_state.board[start_row][7] == 8 && !black_rook2_moved) {
             if (game_state.board[start_row][5] == 0 && game_state.board[start_row][6] == 0) {
@@ -638,7 +667,7 @@ int get_promotion_piece(int piece, int requested_piece) {
 }
 
 // Fonction pour gérer un coup reçu du client et lui appliquer les règles d'échec côté serveur
-bool handle_move_from_client() {
+bool handle_move_from_client(int player_socket) {
     game_state.move_valid = false;
     play = false;
     simul = false;
@@ -647,6 +676,14 @@ bool handle_move_from_client() {
     selected_piece_y = game_state.start_col;
     int row = game_state.end_row;
     int col = game_state.end_col;
+
+    // Le client noir voit le plateau inversé verticalement.
+    // Le serveur garde toujours le plateau dans l'orientation blanche.
+    // On convertit donc uniquement les lignes reçues du joueur noir.
+    if (player_socket == 1) {
+        selected_piece_x = 7 - selected_piece_x;
+        row = 7 - row;
+    }
 
     if (selected_piece_x < 0 || selected_piece_x >= BOARD_SIZE ||
         selected_piece_y < 0 || selected_piece_y >= BOARD_SIZE ||
@@ -773,7 +810,7 @@ bool handle_move_from_client() {
                 }
 
                 // On fait la promotion du pion si elle a lieu
-                if ((piece == 1 || piece == 7) && row == 0) {
+                if ((piece == 1 && row == 0) || (piece == 7 && row == 7)) {
                     game_state.board[row][col] = get_promotion_piece(piece, game_state.promotion_piece);
                 }
 
@@ -783,20 +820,14 @@ bool handle_move_from_client() {
                 simul = false;
                 game_state.move_valid = true;
 
-                reverse_board(game_state.board);
-
                 // Teste si le joueur à qui ça va être le tour de jouer est en échec et mat
                 if (is_checkmate()) {
                     printf("Is checkmate !!!\n");
-                    reverse_board(game_state.board);
-                    // Mettre game_over à true pour arrêter la partie
                     game_state.game_over = true;
                     selected_piece_x = -1;
                     selected_piece_y = -1;
                     return true;
                 }
-
-                reverse_board(game_state.board);
 
                 selected_piece_x = -1;
                 selected_piece_y = -1;
@@ -836,7 +867,6 @@ void handle_clients(int client1_socket, int client2_socket) {
     int client_socket[2] = {client1_socket, client2_socket};
     int player_socket = 0;
     int other_player_socket = 1;
-    int board_owner_socket = 0;
 
     while (1) {
         // Reception du coup du joueur à qui c'est le tour de jouer
@@ -844,13 +874,7 @@ void handle_clients(int client1_socket, int client2_socket) {
             break;
         }
 
-        // Le serveur place son board dans la même orientation que le client qui joue.
-        if (board_owner_socket != player_socket) {
-            reverse_board(game_state.board);
-            board_owner_socket = player_socket;
-        }
-
-        bool valid_move = handle_move_from_client();
+        bool valid_move = handle_move_from_client(player_socket);
 
         if (!valid_move) {
             printf("Coup invalide reçu du joueur %d. Le même joueur rejoue.\n", player_socket + 1);
@@ -892,7 +916,6 @@ void handle_clients(int client1_socket, int client2_socket) {
                 // Changement du tour de joueur pour bien recommencer une partie
                 player_socket = 0;
                 other_player_socket = 1;
-                board_owner_socket = 0;
             } else {
                 game_state.game_over = false;
                 game_state.quit = true;
