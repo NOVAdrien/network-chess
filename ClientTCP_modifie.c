@@ -545,7 +545,11 @@ void start_client(const char *server_ip) {
             if (game_state.quit) {
                 break;
             }
-            reverse_board(game_state.board);
+
+            if (client_id == 1) {
+                reverse_board(game_state.board);
+            }
+
             printf("is_white_turn = %d\n", game_state.is_white_turn);
 
             // Redessiner l'échiquier avec les nouvelles données
@@ -599,7 +603,10 @@ void start_client(const char *server_ip) {
 
                         receive_game_state_from_server(client_socket, &game_state);
 
-                        // La réponse à notre propre coup est déjà dans notre orientation locale.
+                        if (client_id == 1) {
+                            reverse_board(game_state.board);
+                        }
+
                         draw_chessboard(renderer);
                         draw_pieces(renderer);
                         SDL_RenderPresent(renderer);
