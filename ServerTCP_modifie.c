@@ -45,6 +45,16 @@ typedef struct {
     int promotion_piece;
 } GameState;
 
+typedef struct {
+    bool quit;
+    bool restart_choice;
+    int start_row;
+    int start_col;
+    int end_row;
+    int end_col;
+    int promotion_piece;
+} MoveRequest;
+
 GameState game_state;
 
 // Déclaration des fonctions
@@ -177,25 +187,27 @@ int send_game_state_to_client(int client_socket) {
 
 // Fonction pour recevoir la structure de données d'un client
 int receive_game_state_from_client(int client_socket) {
-    GameState received_state;
-    ssize_t bytes_received = recv_all(client_socket, &received_state, sizeof(GameState));
+    MoveRequest request;
+
+    ssize_t bytes_received = recv_all(client_socket, &request, sizeof(MoveRequest));
     if (bytes_received <= 0) {
         if (bytes_received == 0) {
             printf("Client déconnecté.\n");
         } else {
-            perror("Erreur lors de la réception de l'état du jeu");
+            perror("Erreur lors de la réception de la demande du client");
         }
         return -1;
     }
 
-    // Le client ne décide plus du plateau: il transmet uniquement le coup et les choix d'interface.
-    game_state.start_row = received_state.start_row;
-    game_state.start_col = received_state.start_col;
-    game_state.end_row = received_state.end_row;
-    game_state.end_col = received_state.end_col;
-    game_state.promotion_piece = received_state.promotion_piece;
-    game_state.restart_choice = received_state.restart_choice;
-    if (received_state.quit) {
+    // Le client ne transmet plus le plateau : seulement son coup et ses choix d'interface.
+    game_state.start_row = request.start_row;
+    game_state.start_col = request.start_col;
+    game_state.end_row = request.end_row;
+    game_state.end_col = request.end_col;
+    game_state.promotion_piece = request.promotion_piece;
+    game_state.restart_choice = request.restart_choice;
+
+    if (request.quit) {
         game_state.quit = true;
     }
 

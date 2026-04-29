@@ -46,6 +46,16 @@ typedef struct {
     int promotion_piece;
 } GameState;
 
+typedef struct {
+    bool quit;
+    bool restart_choice;
+    int start_row;
+    int start_col;
+    int end_row;
+    int end_col;
+    int promotion_piece;
+} MoveRequest;
+
 // Variable de la structure de données pour les manipuler plus facilement
 GameState game_state;
 
@@ -62,7 +72,7 @@ void draw_piece(SDL_Renderer *renderer, SDL_Texture *texture, int row, int col);
 void draw_pieces(SDL_Renderer *renderer);
 void reverse_board(int board[BOARD_SIZE][BOARD_SIZE]);
 void receive_game_state_from_server(int client_socket, GameState *game_state);
-void send_game_state_to_server(int client_socket, GameState *game_state);
+void send_move_request_to_server(int client_socket, GameState *game_state);
 void start_client(const char *server_ip);
 ssize_t send_all(int socket_fd, const void *buffer, size_t length);
 ssize_t recv_all(int socket_fd, void *buffer, size_t length);
@@ -414,13 +424,24 @@ void receive_game_state_from_server(int client_socket, GameState *game_state) {
 }
 
 // Fonction pour envoyer les données au serveur
-void send_game_state_to_server(int client_socket, GameState *game_state) {
-    ssize_t bytes_sent = send_all(client_socket, game_state, sizeof(GameState));
+void send_move_request_to_server(int client_socket, GameState *game_state) {
+    MoveRequest request;
+
+    request.quit = game_state->quit;
+    request.restart_choice = game_state->restart_choice;
+    request.start_row = game_state->start_row;
+    request.start_col = game_state->start_col;
+    request.end_row = game_state->end_row;
+    request.end_col = game_state->end_col;
+    request.promotion_piece = game_state->promotion_piece;
+
+    ssize_t bytes_sent = send_all(client_socket, &request, sizeof(MoveRequest));
     if (bytes_sent <= 0) {
-        perror("Erreur lors de l'envoi de l'état du jeu au serveur");
+        perror("Erreur lors de l'envoi de la demande au serveur");
         exit(EXIT_FAILURE);
     }
-    printf("État du jeu envoyé au serveur\n");
+
+    printf("Demande envoyée au serveur\n");
 }
 
 // Fonction principale du client
@@ -562,7 +583,7 @@ void start_client(const char *server_ip) {
             printf("Game over = %d\n", game_state.game_over);
             if (game_state.game_over) {
                 handle_game_over(renderer);
-                send_game_state_to_server(client_socket, &game_state);
+                send_move_request_to_server(client_socket, &game_state);
                 receive_game_state_from_server(client_socket, &game_state);
                 if (client_id == 1){
                     reverse_board(game_state.board);
@@ -598,7 +619,7 @@ void start_client(const char *server_ip) {
                     // Si deux clics ont formé un coup, l'envoyer au serveur et attendre la réponse.
                     if (play == true) {
                         printf("Envoi du coup au serveur...\n");
-                        send_game_state_to_server(client_socket, &game_state);
+                        send_move_request_to_server(client_socket, &game_state);
                         play = false;
 
                         receive_game_state_from_server(client_socket, &game_state);
@@ -622,7 +643,7 @@ void start_client(const char *server_ip) {
                         printf("Game over = %d\n", game_state.game_over);
                         if (game_state.game_over) {
                             handle_game_over(renderer);
-                            send_game_state_to_server(client_socket, &game_state);
+                            send_move_request_to_server(client_socket, &game_state);
                             receive_game_state_from_server(client_socket, &game_state);
                             printf("Received new Game state from server\n");
                             printf("quit = %d\n", game_state.quit);
