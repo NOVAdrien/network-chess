@@ -493,22 +493,43 @@ bool is_checkmate() {
                 for (int end_row = 0; end_row < BOARD_SIZE; end_row++) {
                     for (int end_col = 0; end_col < BOARD_SIZE; end_col++) {
                         if (is_valid_move(start_row, start_col, end_row, end_col)) {
-                            // Simulation du déplacement
-                            int temp_piece = game_state.board[end_row][end_col];
-                            int piece = game_state.board[start_row][start_col];
-                            game_state.board[start_row][start_col] = 0;
-                            game_state.board[end_row][end_col] = piece;
+                        // Simulation du déplacement
+                        int temp_piece = game_state.board[end_row][end_col];
+                        int piece = game_state.board[start_row][start_col];
 
-                            bool still_in_check = is_king_in_check();
+                        int en_passant_captured_piece = 0;
+                        int en_passant_captured_row = -1;
+                        bool en_passant_capture = false;
 
-                            // Annulation du mouvement
-                            game_state.board[start_row][start_col] = piece;
-                            game_state.board[end_row][end_col] = temp_piece;
+                        // Cas particulier : simulation d'une capture en passant
+                        if ((piece == 1 || piece == 7) &&
+                            game_state.board[end_row][end_col] == 0 &&
+                            start_col != end_col) {
 
-                            if (!still_in_check) {
-                                return false; // Mouvement possible pour sortir de l'échec
-                            }
+                            en_passant_capture = true;
+                            en_passant_captured_row = start_row;
+                            en_passant_captured_piece = game_state.board[en_passant_captured_row][end_col];
+
+                            game_state.board[en_passant_captured_row][end_col] = 0;
                         }
+
+                        game_state.board[start_row][start_col] = 0;
+                        game_state.board[end_row][end_col] = piece;
+
+                        bool still_in_check = is_king_in_check();
+
+                        // Annulation du mouvement
+                        game_state.board[start_row][start_col] = piece;
+                        game_state.board[end_row][end_col] = temp_piece;
+
+                        if (en_passant_capture && en_passant_captured_row != -1) {
+                            game_state.board[en_passant_captured_row][end_col] = en_passant_captured_piece;
+                        }
+
+                        if (!still_in_check) {
+                            return false; // Mouvement possible pour sortir de l'échec
+                        }
+                    }
                     }
                 }
             }
@@ -734,18 +755,23 @@ bool handle_move_from_client(int player_socket) {
                     }
 
                     // Détection de la capture en passant :
-                    // destination vide + déplacement diagonal
+                    // destination vide + déplacement diagonal + pion adverse réellement présent
                     if (game_state.board[row][col] == 0 && selected_piece_y != col) {
-                        en_passant_capture = true;
+                        int expected_captured_piece = (piece == 1) ? 7 : 1;
+
                         en_passant_captured_row = selected_piece_x;
                         en_passant_captured_piece = game_state.board[en_passant_captured_row][col];
 
-                        game_state.board[en_passant_captured_row][col] = 0;
+                        if (en_passant_captured_piece == expected_captured_piece) {
+                            en_passant_capture = true;
 
-                        if (piece == 1) {
-                            game_state.capture_en_passant_blanc = true;
-                        } else if (piece == 7) {
-                            game_state.capture_en_passant_noir = true;
+                            game_state.board[en_passant_captured_row][col] = 0;
+
+                            if (piece == 1) {
+                                game_state.capture_en_passant_blanc = true;
+                            } else if (piece == 7) {
+                                game_state.capture_en_passant_noir = true;
+                            }
                         }
                     }
 
