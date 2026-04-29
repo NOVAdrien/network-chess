@@ -546,113 +546,89 @@ bool is_castling_valid(int piece, int end_col) {
     }
 
     int start_row = (piece == 6) ? 7 : 0;
+    int rook_piece = (piece == 6) ? 2 : 8;
 
-    if (piece == 6 && !white_king_moved) { // Roi blanc
-        // Roque court (roi vers la droite)
-        if (end_col == 6 && game_state.board[start_row][7] == 2 && !white_rook2_moved) {
-            if (game_state.board[start_row][5] == 0 && game_state.board[start_row][6] == 0) {
-                // Tester si le roi n'est pas en échec sur une des position intermédiaires du roque
-                game_state.board[start_row][4] = 0; // Supprimer le roi de sa position initiale
-                game_state.board[start_row][5] = 6; // Déplacer le roi à une position intermédiare au mouvement
-                if (!is_king_in_check()) {
-                    game_state.board[start_row][5] = 0; // Supprimer le roi de sa position initiale
-                    game_state.board[start_row][6] = 6; // Déplacer le roi à sa position finale
-                    if (!is_king_in_check()) {
-                        // Le roi peut roquer sans soucis d'être échec à découvert, donc on peut bouger la tour
-                        game_state.board[start_row][7] = 0; // Supprimer la tour de sa position initiale
-                        game_state.board[start_row][5] = 2; // Déplacer la tour à sa position finale
-                        white_king_moved = true;
-                        white_rook2_moved = true;
-                        simul = true;
-                        return true;
-                    }
-                }
-                
-                // Annuler le mouvement simulé
-                game_state.board[start_row][4] = 6;
-                game_state.board[start_row][5] = 0;
-                game_state.board[start_row][6] = 0;
-            }
-        // Roque long (roi vers la gauche)
-        } else if (end_col == 2 && game_state.board[start_row][0] == 2 && !white_rook1_moved) {
-            if (game_state.board[start_row][1] == 0 && game_state.board[start_row][2] == 0 && game_state.board[start_row][3] == 0) {
-                // Tester si le roi n'est pas en échec sur une des position intermédiaires du roque
-                game_state.board[start_row][4] = 0; // Supprimer le roi de sa position initiale
-                game_state.board[start_row][3] = 6; // Déplacer le roi à une position intermédiare au mouvement
-                if (!is_king_in_check()) {
-                    game_state.board[start_row][3] = 0; // Supprimer le roi de sa position initiale
-                    game_state.board[start_row][2] = 6; // Déplacer le roi à sa position finale
-                    if (!is_king_in_check()) {
-                        // Le roi peut roquer sans soucis d'être échec à découvert, donc on peut bouger la tour
-                        game_state.board[start_row][0] = 0; // Supprimer la tour de sa position initiale
-                        game_state.board[start_row][3] = 2; // Déplacer la tour à sa position finale
-                        white_king_moved = true;
-                        white_rook1_moved = true;
-                        simul = true;
-                        return true;
-                    }
-                }
+    bool king_already_moved = (piece == 6) ? white_king_moved : black_king_moved;
+    bool rook_already_moved;
 
-                // Annuler le mouvement simulé
-                game_state.board[start_row][4] = 6;
-                game_state.board[start_row][3] = 0;
-                game_state.board[start_row][2] = 0;
-            }
-        }
-    } else if (piece == 12 && !black_king_moved) { // Roi noir
-        // Roque court (roi vers la droite)
-        if (end_col == 6 && game_state.board[start_row][7] == 8 && !black_rook2_moved) {
-            if (game_state.board[start_row][5] == 0 && game_state.board[start_row][6] == 0) {
-                // Tester si le roi n'est pas en échec sur une des position intermédiaires du roque
-                game_state.board[start_row][4] = 0; // Supprimer le roi de sa position initiale
-                game_state.board[start_row][5] = 12; // Déplacer le roi à une position intermédiare au mouvement
-                if (!is_king_in_check()) {
-                    game_state.board[start_row][5] = 0; // Supprimer le roi de sa position initiale
-                    game_state.board[start_row][6] = 12; // Déplacer le roi à sa position finale
-                    if (!is_king_in_check()) {
-                        // Le roi peut roquer sans soucis d'être échec à découvert, donc on peut bouger la tour
-                        game_state.board[start_row][7] = 0; // Supprimer la tour de sa position initiale
-                        game_state.board[start_row][5] = 8; // Déplacer la tour à sa position finale
-                        black_king_moved = true;
-                        black_rook2_moved = true;
-                        simul = true;
-                        return true;
-                    }
-                }
-                
-                // Annuler le mouvement simulé
-                game_state.board[start_row][4] = 12;
-                game_state.board[start_row][5] = 0;
-                game_state.board[start_row][6] = 0;
-            }
-        // Roque long (roi vers la gauche)
-        } else if (end_col == 2 && game_state.board[start_row][0] == 8 && !black_rook1_moved) {
-            if (game_state.board[start_row][1] == 0 && game_state.board[start_row][2] == 0 && game_state.board[start_row][3] == 0) {
-                // Tester si le roi n'est pas en échec sur une des position intermédiaires du roque
-                game_state.board[start_row][4] = 0; // Supprimer le roi de sa position initiale
-                game_state.board[start_row][3] = 12; // Déplacer le roi à une position intermédiare au mouvement
-                if (!is_king_in_check()) {
-                    game_state.board[start_row][3] = 0; // Supprimer le roi de sa position initiale
-                    game_state.board[start_row][2] = 12; // Déplacer le roi à sa position finale
-                    if (!is_king_in_check()) {
-                        // Le roi peut roquer sans soucis d'être échec à découvert, donc on peut bouger la tour
-                        game_state.board[start_row][0] = 0; // Supprimer la tour de sa position initiale
-                        game_state.board[start_row][3] = 8; // Déplacer la tour à sa position finale
-                        black_king_moved = true;
-                        black_rook1_moved = true;
-                        simul = true;
-                        return true;
-                    }
-                }
+    int rook_start_col;
+    int king_middle_col;
 
-                // Annuler le mouvement simulé
-                game_state.board[start_row][4] = 12;
-                game_state.board[start_row][3] = 0;
-                game_state.board[start_row][2] = 0;
-            }
-        }
+    if (king_already_moved) {
+        return false;
     }
-    return false; // Aucun roque valide
+
+    // Le roi doit être sur sa case initiale
+    if (game_state.board[start_row][4] != piece) {
+        return false;
+    }
+
+    if (end_col == 6) { // Roque court
+        rook_start_col = 7;
+        king_middle_col = 5;
+
+        rook_already_moved = (piece == 6) ? white_rook2_moved : black_rook2_moved;
+
+        if (rook_already_moved) {
+            return false;
+        }
+
+        if (game_state.board[start_row][rook_start_col] != rook_piece) {
+            return false;
+        }
+
+        if (game_state.board[start_row][5] != 0 || game_state.board[start_row][6] != 0) {
+            return false;
+        }
+
+    } else if (end_col == 2) { // Roque long
+        rook_start_col = 0;
+        king_middle_col = 3;
+
+        rook_already_moved = (piece == 6) ? white_rook1_moved : black_rook1_moved;
+
+        if (rook_already_moved) {
+            return false;
+        }
+
+        if (game_state.board[start_row][rook_start_col] != rook_piece) {
+            return false;
+        }
+
+        if (game_state.board[start_row][1] != 0 ||
+            game_state.board[start_row][2] != 0 ||
+            game_state.board[start_row][3] != 0) {
+            return false;
+        }
+
+    } else {
+        return false;
+    }
+
+    // Tester si le roi traverse une case attaquée
+    game_state.board[start_row][4] = 0;
+    game_state.board[start_row][king_middle_col] = piece;
+
+    if (is_king_in_check()) {
+        game_state.board[start_row][king_middle_col] = 0;
+        game_state.board[start_row][4] = piece;
+        return false;
+    }
+
+    game_state.board[start_row][king_middle_col] = 0;
+    game_state.board[start_row][end_col] = piece;
+
+    if (is_king_in_check()) {
+        game_state.board[start_row][end_col] = 0;
+        game_state.board[start_row][4] = piece;
+        return false;
+    }
+
+    // Annuler la simulation
+    game_state.board[start_row][end_col] = 0;
+    game_state.board[start_row][4] = piece;
+
+    return true;
 }
 
 // Inverser le board du game_state
@@ -743,6 +719,11 @@ bool handle_move_from_client(int player_socket) {
             bool en_passant_capture = false;
             bool pawn_double_step = false;
 
+            bool castling_move = false;
+            int castling_rook_start_col = -1;
+            int castling_rook_end_col = -1;
+            int castling_rook_piece = 0;
+
             // Simule le déplacement et vérifie si le roi allié est mis en échec, auquel cas le coup est annulé et le tour recommence
             if (piece == 1 || piece == 7) {  // Pion
                 if (is_valid_pawn_move(selected_piece_x, selected_piece_y, row, col, piece)){
@@ -819,9 +800,32 @@ bool handle_move_from_client(int player_socket) {
                     game_state.board[selected_piece_x][selected_piece_y] = 0;
                     game_state.board[row][col] = piece;
                     simul = true;
+
                 } else if (row - selected_piece_x == 0 && abs(selected_piece_y - col) == 2) {
-                    if (is_castling_valid(piece,col)) {
-                        // Le coup a été simulé et validé dans la fonction, rien d'autre à faire
+                    if (is_castling_valid(piece, col)) {
+                        // On applique réellement le roque ici, et non plus dans is_castling_valid()
+                        temp_piece = game_state.board[row][col];
+
+                        castling_move = true;
+                        castling_rook_piece = (piece == 6) ? 2 : 8;
+
+                        if (col == 6) { // Roque court
+                            castling_rook_start_col = 7;
+                            castling_rook_end_col = 5;
+                        } else if (col == 2) { // Roque long
+                            castling_rook_start_col = 0;
+                            castling_rook_end_col = 3;
+                        }
+
+                        // Déplacer le roi
+                        game_state.board[selected_piece_x][selected_piece_y] = 0;
+                        game_state.board[row][col] = piece;
+
+                        // Déplacer la tour
+                        game_state.board[selected_piece_x][castling_rook_start_col] = 0;
+                        game_state.board[selected_piece_x][castling_rook_end_col] = castling_rook_piece;
+
+                        simul = true;
                     }
                 }
             }
@@ -840,6 +844,23 @@ bool handle_move_from_client(int player_socket) {
                     white_king_moved = true;
                 } else if (selected_piece_x == 0 && selected_piece_y == 4 && piece == 12) {
                     black_king_moved = true;
+                }
+
+                // Si le coup validé est un roque, on marque aussi la tour correspondante comme bougée
+                if (castling_move) {
+                    if (piece == 6) { // Roi blanc
+                        if (col == 6) {
+                            white_rook2_moved = true;
+                        } else if (col == 2) {
+                            white_rook1_moved = true;
+                        }
+                    } else if (piece == 12) { // Roi noir
+                        if (col == 6) {
+                            black_rook2_moved = true;
+                        } else if (col == 2) {
+                            black_rook1_moved = true;
+                        }
+                    }
                 }
 
                 // Si un pion vient de faire un double pas, on mémorise la colonne pour l'en passant
@@ -879,6 +900,15 @@ bool handle_move_from_client(int player_socket) {
                 // Annuler la capture en passant si elle avait été simulée
                 if (en_passant_capture && en_passant_captured_row != -1) {
                     game_state.board[en_passant_captured_row][col] = en_passant_captured_piece;
+                }
+
+                // Annuler la tour si un roque avait été simulé
+                if (castling_move &&
+                    castling_rook_start_col != -1 &&
+                    castling_rook_end_col != -1) {
+
+                    game_state.board[selected_piece_x][castling_rook_end_col] = 0;
+                    game_state.board[selected_piece_x][castling_rook_start_col] = castling_rook_piece;
                 }
 
                 // Annuler le coup joué
