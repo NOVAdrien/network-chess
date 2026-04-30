@@ -899,29 +899,31 @@ bool handle_move_from_client(int player_socket) {
                     selected_piece_x = -1;
                     selected_piece_y = -1;
                     return true;
+
+                } else { // Si le joueur a joué mais que son roi est en échec, le tour recommence
+                    // Annuler la capture en passant si elle avait été simulée
+                    if (en_passant_capture && en_passant_captured_row != -1) {
+                        game_state.board[en_passant_captured_row][col] = en_passant_captured_piece;
+                    }
+
+                    // Annuler la tour si un roque avait été simulé
+                    if (castling_move &&
+                        castling_rook_start_col != -1 &&
+                        castling_rook_end_col != -1) {
+
+                        game_state.board[selected_piece_x][castling_rook_end_col] = 0;
+                        game_state.board[selected_piece_x][castling_rook_start_col] = castling_rook_piece;
+                    }
+
+                    // Annuler le coup joué
+                    game_state.board[row][col] = temp_piece;
+                    game_state.board[selected_piece_x][selected_piece_y] = piece;
+
+                    game_state.capture_en_passant_blanc = false;
+                    game_state.capture_en_passant_noir = false;
+                    simul = false;
+                    game_state.move_valid = false;
                 }
-
-            } else { // Si le joueur a joué mais que son roi est en échec, le tour recommence
-                // Annuler la capture en passant si elle avait été simulée
-                if (en_passant_capture && en_passant_captured_row != -1) {
-                    game_state.board[en_passant_captured_row][col] = en_passant_captured_piece;
-                }
-
-                // Annuler la tour si un roque avait été simulé
-                if (castling_move &&
-                    castling_rook_start_col != -1 &&
-                    castling_rook_end_col != -1) {
-
-                    game_state.board[selected_piece_x][castling_rook_end_col] = 0;
-                    game_state.board[selected_piece_x][castling_rook_start_col] = castling_rook_piece;
-                }
-
-                // Annuler le coup joué
-                game_state.board[row][col] = temp_piece;
-                game_state.board[selected_piece_x][selected_piece_y] = piece;
-
-                game_state.capture_en_passant_blanc = false;
-                game_state.capture_en_passant_noir = false;
             }
         }
 
