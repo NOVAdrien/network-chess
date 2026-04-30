@@ -426,6 +426,7 @@ void receive_game_state_from_server(int client_socket, GameState *game_state) {
 // Fonction pour envoyer les données au serveur
 void send_move_request_to_server(int client_socket, GameState *game_state) {
     MoveRequest request;
+    memset(&request, 0, sizeof(MoveRequest));
 
     request.quit = game_state->quit;
     request.restart_choice = game_state->restart_choice;
