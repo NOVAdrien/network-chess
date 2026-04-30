@@ -77,7 +77,6 @@ bool is_valid_move(int start_row, int start_col, int end_row, int end_col);
 bool is_king_in_check();
 bool is_checkmate();
 bool is_castling_valid(int piece, int end_col);
-void reverse_board(int board[BOARD_SIZE][BOARD_SIZE]);
 bool handle_move_from_client(int player_socket);
 int get_promotion_piece(int piece, int requested_piece);
 ssize_t send_all(int socket_fd, const void *buffer, size_t length);
@@ -646,20 +645,6 @@ bool is_castling_valid(int piece, int end_col) {
 
     return true;
 }
-
-// Inverser le board du game_state
-void reverse_board(int board[BOARD_SIZE][BOARD_SIZE]) {
-    int temp;
-    for (int row = 0; row < BOARD_SIZE / 2; row++) {
-        for (int col = 0; col < BOARD_SIZE; col++) {
-            // Échanger les lignes symétriques
-            temp = board[row][col];
-            board[row][col] = board[BOARD_SIZE - 1 - row][col];
-            board[BOARD_SIZE - 1 - row][col] = temp;
-        }
-    }
-}
-
 
 int get_promotion_piece(int piece, int requested_piece) {
     if (piece == 1) {
