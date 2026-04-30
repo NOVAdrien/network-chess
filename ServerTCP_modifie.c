@@ -185,7 +185,7 @@ int send_game_state_to_client(int client_socket) {
     return 0;
 }
 
-// Fonction pour recevoir la structure de données d'un client
+// Fonction pour recevoir la demande de coup ou de choix d'un client
 int receive_game_state_from_client(int client_socket) {
     MoveRequest request;
 
@@ -518,11 +518,15 @@ bool is_checkmate() {
                             game_state.board[end_row][end_col] == 0 &&
                             start_col != end_col) {
 
-                            en_passant_capture = true;
+                            int expected_captured_piece = (piece == 1) ? 7 : 1;
+
                             en_passant_captured_row = start_row;
                             en_passant_captured_piece = game_state.board[en_passant_captured_row][end_col];
 
-                            game_state.board[en_passant_captured_row][end_col] = 0;
+                            if (en_passant_captured_piece == expected_captured_piece) {
+                                en_passant_capture = true;
+                                game_state.board[en_passant_captured_row][end_col] = 0;
+                            }
                         }
 
                         game_state.board[start_row][start_col] = 0;
@@ -841,74 +845,78 @@ bool handle_move_from_client(int player_socket) {
                     }
                 }
             }
-            if (!is_king_in_check() && simul) { // Si le joueur a joué et que son roi n'est pas en échec, on valide le coup et on change la couleur du tour de jeu
-                // Si une tour a été bougée, on doit empêcher le mouvement de roque avec cette tour
-                if (selected_piece_x == 7 && selected_piece_y == 0 && piece == 2) {
-                    white_rook1_moved = true;
-                } else if (selected_piece_x == 7 && selected_piece_y == 7 && piece == 2) {
-                    white_rook2_moved = true;
-                } else if (selected_piece_x == 0 && selected_piece_y == 0 && piece == 8) {
-                    black_rook1_moved = true;
-                } else if (selected_piece_x == 0 && selected_piece_y == 7 && piece == 8) {
-                    black_rook2_moved = true;
-                // Si un roi a été bougé, on doit empêcher le mouvement de roque avec ce roi
-                } else if (selected_piece_x == 7 && selected_piece_y == 4 && piece == 6) {
-                    white_king_moved = true;
-                } else if (selected_piece_x == 0 && selected_piece_y == 4 && piece == 12) {
-                    black_king_moved = true;
-                }
+            if (simul) {
+                bool king_in_check_after_move = is_king_in_check();
 
-                // Si le coup validé est un roque, on marque aussi la tour correspondante comme bougée
-                if (castling_move) {
-                    if (piece == 6) { // Roi blanc
-                        if (col == 6) {
-                            white_rook2_moved = true;
-                        } else if (col == 2) {
-                            white_rook1_moved = true;
-                        }
-                    } else if (piece == 12) { // Roi noir
-                        if (col == 6) {
-                            black_rook2_moved = true;
-                        } else if (col == 2) {
-                            black_rook1_moved = true;
+                if (!king_in_check_after_move) { // Si le joueur a joué et que son roi n'est pas en échec, on valide le coup et on change la couleur du tour de jeu
+                    // Si une tour a été bougée, on doit empêcher le mouvement de roque avec cette tour
+                    if (selected_piece_x == 7 && selected_piece_y == 0 && piece == 2) {
+                        white_rook1_moved = true;
+                    } else if (selected_piece_x == 7 && selected_piece_y == 7 && piece == 2) {
+                        white_rook2_moved = true;
+                    } else if (selected_piece_x == 0 && selected_piece_y == 0 && piece == 8) {
+                        black_rook1_moved = true;
+                    } else if (selected_piece_x == 0 && selected_piece_y == 7 && piece == 8) {
+                        black_rook2_moved = true;
+                    // Si un roi a été bougé, on doit empêcher le mouvement de roque avec ce roi
+                    } else if (selected_piece_x == 7 && selected_piece_y == 4 && piece == 6) {
+                        white_king_moved = true;
+                    } else if (selected_piece_x == 0 && selected_piece_y == 4 && piece == 12) {
+                        black_king_moved = true;
+                    }
+
+                    // Si le coup validé est un roque, on marque aussi la tour correspondante comme bougée
+                    if (castling_move) {
+                        if (piece == 6) { // Roi blanc
+                            if (col == 6) {
+                                white_rook2_moved = true;
+                            } else if (col == 2) {
+                                white_rook1_moved = true;
+                            }
+                        } else if (piece == 12) { // Roi noir
+                            if (col == 6) {
+                                black_rook2_moved = true;
+                            } else if (col == 2) {
+                                black_rook1_moved = true;
+                            }
                         }
                     }
-                }
 
-                // Si un pion vient de faire un double pas, on mémorise la colonne pour l'en passant
-                if (pawn_double_step) {
-                    if (piece == 1) {
-                        game_state.en_passant_blanc = col;
-                    } else if (piece == 7) {
-                        game_state.en_passant_noir = col;
+                    // Si un pion vient de faire un double pas, on mémorise la colonne pour l'en passant
+                    if (pawn_double_step) {
+                        if (piece == 1) {
+                            game_state.en_passant_blanc = col;
+                        } else if (piece == 7) {
+                            game_state.en_passant_noir = col;
+                        }
                     }
-                }
 
-                // On fait la promotion du pion si elle a lieu
-                if ((piece == 1 && row == 0) || (piece == 7 && row == 7)) {
-                    game_state.board[row][col] = get_promotion_piece(piece, game_state.promotion_piece);
-                }
+                    // On fait la promotion du pion si elle a lieu
+                    if ((piece == 1 && row == 0) || (piece == 7 && row == 7)) {
+                        game_state.board[row][col] = get_promotion_piece(piece, game_state.promotion_piece);
+                    }
 
-                // On change les variables de tour
-                game_state.is_white_turn = !game_state.is_white_turn;
-                play = true;
-                simul = false;
-                game_state.move_valid = true;
+                    // On change les variables de tour
+                    game_state.is_white_turn = !game_state.is_white_turn;
+                    play = true;
+                    simul = false;
+                    game_state.move_valid = true;
 
-                // Teste si le joueur à qui ça va être le tour de jouer est en échec et mat
-                if (is_checkmate()) {
-                    printf("Is checkmate !!!\n");
-                    game_state.game_over = true;
+                    // Teste si le joueur à qui ça va être le tour de jouer est en échec et mat
+                    if (is_checkmate()) {
+                        printf("Is checkmate !!!\n");
+                        game_state.game_over = true;
+                        selected_piece_x = -1;
+                        selected_piece_y = -1;
+                        return true;
+                    }
+
                     selected_piece_x = -1;
                     selected_piece_y = -1;
                     return true;
                 }
 
-                selected_piece_x = -1;
-                selected_piece_y = -1;
-                return true;
-
-            } else if (is_king_in_check() && simul) { // Si le joueur a joué mais que son roi est en échec, le tour recommence
+            } else { // Si le joueur a joué mais que son roi est en échec, le tour recommence
                 // Annuler la capture en passant si elle avait été simulée
                 if (en_passant_capture && en_passant_captured_row != -1) {
                     game_state.board[en_passant_captured_row][col] = en_passant_captured_piece;
