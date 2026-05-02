@@ -17,11 +17,11 @@
 
 // Variables pour gérer le tour de jeu
 int client_id;
-bool play = false;
+bool move_ready_to_send = false;
 
 // Variables utilisées pour gérer la sélection ou non d'une pièce adéquate (vaut -1 si aucune pièce n'est sélectionnée)
-int selected_piece_x = -1;
-int selected_piece_y = -1;
+int selected_row = -1;
+int selected_col = -1;
 
 // Tableau et textures pour interface graphique
 SDL_Texture* white_pawn, * white_rook, * white_knight, * white_bishop, * white_king, * white_queen;
@@ -34,10 +34,10 @@ typedef struct {
     bool is_white_turn;
     bool game_over;
     bool restart_choice;
-    int en_passant_blanc;
-    int en_passant_noir;
-    bool capture_en_passant_blanc;
-    bool capture_en_passant_noir;
+    int white_en_passant_col;
+    int black_en_passant_col;
+    bool white_en_passant_capture;
+    bool black_en_passant_capture;
     bool move_valid;
     int start_row;
     int start_col;
@@ -63,14 +63,14 @@ GameState game_state;
 SDL_Texture* load_texture(const char *file, SDL_Renderer *renderer);
 void show_promotion_menu(SDL_Renderer *renderer, int piece, int menu_x, int menu_y);
 int handle_promotion_selection(int x, int y, int piece, int menu_x, int menu_y);
-void promote_pawn(int row, int col, int piece, SDL_Renderer *renderer);
-void handle_game_over(SDL_Renderer *renderer);
-void handle_mouse_click(int x, int y, SDL_Renderer *renderer);
+void choose_promotion_piece(int row, int col, int piece, SDL_Renderer *renderer);
+void show_game_over_menu(SDL_Renderer *renderer);
+void handle_board_click(int x, int y, SDL_Renderer *renderer);
 void load_all_textures(SDL_Renderer* renderer);
 void draw_chessboard(SDL_Renderer *renderer);
 void draw_piece(SDL_Renderer *renderer, SDL_Texture *texture, int row, int col);
 void draw_pieces(SDL_Renderer *renderer);
-void reverse_board(int board[BOARD_SIZE][BOARD_SIZE]);
+void flip_board_vertically(int board[BOARD_SIZE][BOARD_SIZE]);
 void receive_game_state_from_server(int client_socket, GameState *game_state);
 void send_move_request_to_server(int client_socket, GameState *game_state);
 void start_client(const char *server_ip);
@@ -190,7 +190,7 @@ int handle_promotion_selection(int x, int y, int piece, int menu_x, int menu_y) 
 }
 
 // Fonction pour promouvoir un pion avec un choix de pièce
-void promote_pawn(int row, int col, int piece, SDL_Renderer *renderer) {
+void choose_promotion_piece(int row, int col, int piece, SDL_Renderer *renderer) {
     // Conservée côté client pour l'interface: le serveur applique réellement la promotion après validation.
     int menu_x = col * SQUARE_SIZE;
     int menu_y = row * SQUARE_SIZE;
@@ -215,7 +215,7 @@ void promote_pawn(int row, int col, int piece, SDL_Renderer *renderer) {
 }
 
 // Demander aux clients de rejouer une partie ou de quitter
-void handle_game_over(SDL_Renderer *renderer) {
+void show_game_over_menu(SDL_Renderer *renderer) {
     printf("open handle game over\n");
     SDL_Color text_color = {255, 255, 255, 255}; // Couleur du texte (blanc)
     SDL_Color bg_color = {0, 0, 0, 255}; // Couleur de fond (noir)
@@ -286,7 +286,7 @@ void handle_game_over(SDL_Renderer *renderer) {
 }
 
 // Fonction pour gérer le clique de la souris et transmettre le coup demandé au serveur
-void handle_mouse_click(int x, int y, SDL_Renderer *renderer) {
+void handle_board_click(int x, int y, SDL_Renderer *renderer) {
     int row = y / SQUARE_SIZE;
     int col = x / SQUARE_SIZE;
 
@@ -294,18 +294,18 @@ void handle_mouse_click(int x, int y, SDL_Renderer *renderer) {
         return;
     }
 
-    if (selected_piece_x == -1 && selected_piece_y == -1) { // Une pièce n'a pas encore été sélectionnée
+    if (selected_row == -1 && selected_col == -1) { // Une pièce n'a pas encore été sélectionnée
         if (game_state.board[row][col] != 0) {
             // On laisse le serveur décider de la légalité; le client ne fait qu'éviter une sélection vide.
-            selected_piece_x = row;
-            selected_piece_y = col;
-            printf("Pièce sélectionnée en %d %d\n", selected_piece_x, selected_piece_y);
+            selected_row = row;
+            selected_col = col;
+            printf("Pièce sélectionnée en %d %d\n", selected_row, selected_col);
         }
     } else {
-        int piece = game_state.board[selected_piece_x][selected_piece_y];
+        int piece = game_state.board[selected_row][selected_col];
 
-        game_state.start_row = selected_piece_x;
-        game_state.start_col = selected_piece_y;
+        game_state.start_row = selected_row;
+        game_state.start_col = selected_col;
         game_state.end_row = row;
         game_state.end_col = col;
         game_state.promotion_piece = 0;
@@ -313,12 +313,12 @@ void handle_mouse_click(int x, int y, SDL_Renderer *renderer) {
 
         // Le choix de promotion est une interaction d'interface; le serveur validera ensuite le coup.
         if ((piece == 1 || piece == 7) && row == 0) {
-            promote_pawn(row, col, piece, renderer);
+            choose_promotion_piece(row, col, piece, renderer);
         }
 
-        play = true;
-        selected_piece_x = -1;
-        selected_piece_y = -1;
+        move_ready_to_send = true;
+        selected_row = -1;
+        selected_col = -1;
     }
 }
 
@@ -401,7 +401,7 @@ void draw_pieces(SDL_Renderer *renderer) {
 }
 
 // Inverser le board du game_state
-void reverse_board(int board[BOARD_SIZE][BOARD_SIZE]) {
+void flip_board_vertically(int board[BOARD_SIZE][BOARD_SIZE]) {
     int temp;
     for (int row = 0; row < BOARD_SIZE / 2; row++) {
         for (int col = 0; col < BOARD_SIZE; col++) {
@@ -500,7 +500,7 @@ void start_client(const char *server_ip) {
 
     // Inversion du board uniquement pour le client 2 qui joue les noirs
     if (client_id == 1) {
-        reverse_board(game_state.board);
+        flip_board_vertically(game_state.board);
     }
     printf("Client %d a reçu le Game_state du serveur\n", client_id + 1);
 
@@ -569,7 +569,7 @@ void start_client(const char *server_ip) {
             }
 
             if (client_id == 1) {
-                reverse_board(game_state.board);
+                flip_board_vertically(game_state.board);
             }
 
             printf("is_white_turn = %d\n", game_state.is_white_turn);
@@ -583,11 +583,11 @@ void start_client(const char *server_ip) {
             // Si ce joueur est mis game_over
             printf("Game over = %d\n", game_state.game_over);
             if (game_state.game_over) {
-                handle_game_over(renderer);
+                show_game_over_menu(renderer);
                 send_move_request_to_server(client_socket, &game_state);
                 receive_game_state_from_server(client_socket, &game_state);
                 if (client_id == 1){
-                    reverse_board(game_state.board);
+                    flip_board_vertically(game_state.board);
                 }
                 printf("Received new Game state from server\n");
 
@@ -615,18 +615,18 @@ void start_client(const char *server_ip) {
                     printf("Clic détecté du client %d qui doit jouer.\n", client_id + 1);
 
                     // Le joueur choisit un départ et une arrivée; le serveur validera le coup.
-                    handle_mouse_click(e.button.x, e.button.y, renderer);
+                    handle_board_click(e.button.x, e.button.y, renderer);
 
                     // Si deux clics ont formé un coup, l'envoyer au serveur et attendre la réponse.
-                    if (play == true) {
+                    if (move_ready_to_send == true) {
                         printf("Envoi du coup au serveur...\n");
                         send_move_request_to_server(client_socket, &game_state);
-                        play = false;
+                        move_ready_to_send = false;
 
                         receive_game_state_from_server(client_socket, &game_state);
 
                         if (client_id == 1) {
-                            reverse_board(game_state.board);
+                            flip_board_vertically(game_state.board);
                         }
 
                         draw_chessboard(renderer);
@@ -643,7 +643,7 @@ void start_client(const char *server_ip) {
                         // Si ce joueur a mis game_over
                         printf("Game over = %d\n", game_state.game_over);
                         if (game_state.game_over) {
-                            handle_game_over(renderer);
+                            show_game_over_menu(renderer);
                             send_move_request_to_server(client_socket, &game_state);
                             receive_game_state_from_server(client_socket, &game_state);
                             printf("Received new Game state from server\n");
@@ -651,7 +651,7 @@ void start_client(const char *server_ip) {
 
                             if (!game_state.quit) {
                                 if (client_id == 1) {
-                                    reverse_board(game_state.board);
+                                    flip_board_vertically(game_state.board);
                                 }
 
                                 // Redessiner l'échiquier après réinitialisation

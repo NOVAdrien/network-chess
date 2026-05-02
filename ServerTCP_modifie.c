@@ -11,20 +11,19 @@
 #define BOARD_SIZE 8
 
 // Variables pour gérer le tour de jeu et les simulations côté serveur
-bool play = false;
-bool simul = false;
+bool move_simulated = false;
 
 // Tests qui vérifient si les pièces utilisées dans le roque ont déjà bougé
-bool white_rook1_moved = false;
-bool white_rook2_moved = false;
-bool black_rook1_moved = false;
-bool black_rook2_moved = false;
+bool white_queenside_rook_moved = false;
+bool white_kingside_rook_moved = false;
+bool black_queenside_rook_moved = false;
+bool black_kingside_rook_moved = false;
 bool white_king_moved = false;
 bool black_king_moved = false;
 
 // Variables utilisées pour gérer la sélection ou non d'une pièce adéquate
-int selected_piece_x = -1;
-int selected_piece_y = -1;
+int selected_row = -1;
+int selected_col = -1;
 
 // Structure des données échangées entre clients et serveur
 typedef struct {
@@ -33,10 +32,10 @@ typedef struct {
     bool is_white_turn;
     bool game_over;
     bool restart_choice;
-    int en_passant_blanc;
-    int en_passant_noir;
-    bool capture_en_passant_blanc;
-    bool capture_en_passant_noir;
+    int white_en_passant_col;
+    int black_en_passant_col;
+    bool white_en_passant_capture;
+    bool black_en_passant_capture;
     bool move_valid;
     int start_row;
     int start_col;
@@ -61,7 +60,7 @@ GameState game_state;
 void init_board();
 void init_game_state();
 int send_game_state_to_client(int client_socket);
-int receive_game_state_from_client(int client_socket);
+int receive_move_request_from_client(int client_socket);
 void handle_clients(int client1_socket, int client2_socket);
 void start_server();
 bool is_horizontal_path_clear(int start_row, int start_col, int end_col);
@@ -76,9 +75,9 @@ bool is_valid_pawn_move(int start_row, int start_col, int end_row, int end_col, 
 bool is_valid_move(int start_row, int start_col, int end_row, int end_col);
 bool is_king_in_check();
 bool is_checkmate();
-bool is_castling_valid(int piece, int end_col);
+bool is_valid_castling_move(int piece, int end_col);
 bool handle_move_from_client(int player_socket);
-int get_promotion_piece(int piece, int requested_piece);
+int get_promotion_piece(int piece, int requested_promotion_piece);
 ssize_t send_all(int socket_fd, const void *buffer, size_t length);
 ssize_t recv_all(int socket_fd, void *buffer, size_t length);
 
@@ -151,10 +150,10 @@ void init_game_state() {
     game_state.quit = false;
     game_state.game_over = false;
     game_state.restart_choice = false;
-    game_state.en_passant_blanc = 100;
-    game_state.en_passant_noir = 100;
-    game_state.capture_en_passant_blanc = false;
-    game_state.capture_en_passant_noir = false;
+    game_state.white_en_passant_col = -1;
+    game_state.black_en_passant_col = -1;
+    game_state.white_en_passant_capture = false;
+    game_state.black_en_passant_capture = false;
     game_state.move_valid = true;
     game_state.start_row = -1;
     game_state.start_col = -1;
@@ -162,14 +161,13 @@ void init_game_state() {
     game_state.end_col = -1;
     game_state.promotion_piece = 0;
 
-    play = false;
-    simul = false;
-    selected_piece_x = -1;
-    selected_piece_y = -1;
-    white_rook1_moved = false;
-    white_rook2_moved = false;
-    black_rook1_moved = false;
-    black_rook2_moved = false;
+    move_simulated = false;
+    selected_row = -1;
+    selected_col = -1;
+    white_queenside_rook_moved = false;
+    white_kingside_rook_moved = false;
+    black_queenside_rook_moved = false;
+    black_kingside_rook_moved = false;
     white_king_moved = false;
     black_king_moved = false;
 }
@@ -185,10 +183,10 @@ int send_game_state_to_client(int client_socket) {
 }
 
 // Fonction pour recevoir la demande de coup ou de choix d'un client
-int receive_game_state_from_client(int client_socket) {
-    MoveRequest request;
+int receive_move_request_from_client(int client_socket) {
+    MoveRequest  move_request;
 
-    ssize_t bytes_received = recv_all(client_socket, &request, sizeof(MoveRequest));
+    ssize_t bytes_received = recv_all(client_socket, &move_request, sizeof(MoveRequest));
     if (bytes_received <= 0) {
         if (bytes_received == 0) {
             printf("Client déconnecté.\n");
@@ -199,14 +197,14 @@ int receive_game_state_from_client(int client_socket) {
     }
 
     // Le client ne transmet plus le plateau : seulement son coup et ses choix d'interface.
-    game_state.start_row = request.start_row;
-    game_state.start_col = request.start_col;
-    game_state.end_row = request.end_row;
-    game_state.end_col = request.end_col;
-    game_state.promotion_piece = request.promotion_piece;
-    game_state.restart_choice = request.restart_choice;
+    game_state.start_row = move_request.start_row;
+    game_state.start_col = move_request.start_col;
+    game_state.end_row = move_request.end_row;
+    game_state.end_col = move_request.end_col;
+    game_state.promotion_piece = move_request.promotion_piece;
+    game_state.restart_choice = move_request.restart_choice;
 
-    if (request.quit) {
+    if (move_request.quit) {
         game_state.quit = true;
     }
 
@@ -401,9 +399,9 @@ bool is_valid_pawn_move(int start_row, int start_col, int end_row, int end_col, 
         end_row == en_passant_capture_row &&
         abs(end_col - start_col) == 1) {
 
-        if (piece == 1 && end_col == game_state.en_passant_noir) {
+        if (piece == 1 && end_col == game_state.black_en_passant_col) {
             return true;
-        } else if (piece == 7 && end_col == game_state.en_passant_blanc) {
+        } else if (piece == 7 && end_col == game_state.white_en_passant_col) {
             return true;
         }
     }
@@ -554,7 +552,7 @@ bool is_checkmate() {
 }
 
 // Fonction pour vérifier si le roque est valide
-bool is_castling_valid(int piece, int end_col) {
+bool is_valid_castling_move(int piece, int end_col) {
     // Vérification que le roi n'est pas en échec avant de roquer
     if (is_king_in_check()) {
         return false;
@@ -582,7 +580,7 @@ bool is_castling_valid(int piece, int end_col) {
         rook_start_col = 7;
         king_middle_col = 5;
 
-        rook_already_moved = (piece == 6) ? white_rook2_moved : black_rook2_moved;
+        rook_already_moved = (piece == 6) ? white_kingside_rook_moved : black_kingside_rook_moved;
 
         if (rook_already_moved) {
             return false;
@@ -600,7 +598,7 @@ bool is_castling_valid(int piece, int end_col) {
         rook_start_col = 0;
         king_middle_col = 3;
 
-        rook_already_moved = (piece == 6) ? white_rook1_moved : black_rook1_moved;
+        rook_already_moved = (piece == 6) ? white_queenside_rook_moved : black_queenside_rook_moved;
 
         if (rook_already_moved) {
             return false;
@@ -646,73 +644,72 @@ bool is_castling_valid(int piece, int end_col) {
     return true;
 }
 
-int get_promotion_piece(int piece, int requested_piece) {
+int get_promotion_piece(int piece, int requested_promotion_piece) {
     if (piece == 1) {
-        if (requested_piece == 5 || requested_piece == 2 || requested_piece == 3 || requested_piece == 4) {
-            return requested_piece;
+        if (requested_promotion_piece == 5 || requested_promotion_piece == 2 || requested_promotion_piece == 3 || requested_promotion_piece == 4) {
+            return requested_promotion_piece;
         }
         return 5;
     } else if (piece == 7) {
-        if (requested_piece == 11 || requested_piece == 8 || requested_piece == 9 || requested_piece == 10) {
-            return requested_piece;
+        if (requested_promotion_piece == 11 || requested_promotion_piece == 8 || requested_promotion_piece == 9 || requested_promotion_piece == 10) {
+            return requested_promotion_piece;
         }
         return 11;
     }
-    return requested_piece;
+    return requested_promotion_piece;
 }
 
 // Fonction pour gérer un coup reçu du client et lui appliquer les règles d'échec côté serveur
-bool handle_move_from_client(int player_socket) {
+bool handle_move_from_client(int current_player_index) {
     game_state.move_valid = false;
-    play = false;
-    simul = false;
+    move_simulated = false;
 
-    selected_piece_x = game_state.start_row;
-    selected_piece_y = game_state.start_col;
-    int row = game_state.end_row;
-    int col = game_state.end_col;
+    selected_row = game_state.start_row;
+    selected_col = game_state.start_col;
+    int target_row = game_state.end_row;
+    int target_col = game_state.end_col;
 
     // Le client noir voit le plateau inversé verticalement.
     // Le serveur garde toujours le plateau dans l'orientation blanche.
     // On convertit donc uniquement les lignes reçues du joueur noir.
-    if (player_socket == 1) {
-        selected_piece_x = 7 - selected_piece_x;
-        row = 7 - row;
+    if (current_player_index == 1) {
+        selected_row = 7 - selected_row;
+        target_row = 7 - target_row;
     }
 
-    if (selected_piece_x < 0 || selected_piece_x >= BOARD_SIZE ||
-        selected_piece_y < 0 || selected_piece_y >= BOARD_SIZE ||
-        row < 0 || row >= BOARD_SIZE ||
-        col < 0 || col >= BOARD_SIZE) {
-        selected_piece_x = -1;
-        selected_piece_y = -1;
+    if (selected_row < 0 || selected_row >= BOARD_SIZE ||
+        selected_col < 0 || selected_col >= BOARD_SIZE ||
+        target_row < 0 || target_row >= BOARD_SIZE ||
+        target_col < 0 || target_col >= BOARD_SIZE) {
+        selected_row = -1;
+        selected_col = -1;
         return false;
     }
 
     // Réinitialisation de la variable en_passant du joueur à qui c'est le tour de jouer
     if (game_state.is_white_turn) {
-        game_state.en_passant_blanc = 100;
-        game_state.capture_en_passant_blanc = false;
+        game_state.white_en_passant_col = -1;
+        game_state.white_en_passant_capture = false;
     } else if (!game_state.is_white_turn) {
-        game_state.en_passant_noir = 100;
-        game_state.capture_en_passant_noir = false;
+        game_state.black_en_passant_col = -1;
+        game_state.black_en_passant_capture = false;
     }
 
-    if (selected_piece_x != -1 && selected_piece_y != -1) {
+    if (selected_row != -1 && selected_col != -1) {
         // On définit comme "pièce" la case sélectionnée
-        int piece = game_state.board[selected_piece_x][selected_piece_y];
+        int piece = game_state.board[selected_row][selected_col];
 
         // Vérifier si la pièce sélectionnée appartient bien au joueur dont c'est le tour
         if ((game_state.is_white_turn && !(piece >= 1 && piece <= 6)) ||
             (!game_state.is_white_turn && !(piece >= 7 && piece <= 12))) {
-            selected_piece_x = -1;
-            selected_piece_y = -1;
+            selected_row = -1;
+            selected_col = -1;
             return false;
         }
 
         // Vérifier si la case de destination n'est pas occupée par une pièce de la même couleur
-        if ((game_state.is_white_turn && (game_state.board[row][col] == 0 || (game_state.board[row][col] >= 7 && game_state.board[row][col] <= 12))) || 
-            (!game_state.is_white_turn && (game_state.board[row][col] == 0 || (game_state.board[row][col] >= 1 && game_state.board[row][col] <= 6)))) {
+        if ((game_state.is_white_turn && (game_state.board[target_row][target_col] == 0 || (game_state.board[target_row][target_col] >= 7 && game_state.board[target_row][target_col] <= 12))) || 
+            (!game_state.is_white_turn && (game_state.board[target_row][target_col] == 0 || (game_state.board[target_row][target_col] >= 1 && game_state.board[target_row][target_col] <= 6)))) {
             // On définit comme "temp_piece" la case d'arrivée sélectionnée, et on stocke le contenu de cette case
             int temp_piece = 0;
             int en_passant_captured_piece = 0;
@@ -727,142 +724,142 @@ bool handle_move_from_client(int player_socket) {
 
             // Simule le déplacement et vérifie si le roi allié est mis en échec, auquel cas le coup est annulé et le tour recommence
             if (piece == 1 || piece == 7) {  // Pion
-                if (is_valid_pawn_move(selected_piece_x, selected_piece_y, row, col, piece)){
+                if (is_valid_pawn_move(selected_row, selected_col, target_row, target_col, piece)){
                     // On simule le déplacement du pion
-                    temp_piece = game_state.board[row][col];
+                    temp_piece = game_state.board[target_row][target_col];
 
                     // Détection du double déplacement de pion
-                    if (abs(row - selected_piece_x) == 2) {
+                    if (abs(target_row - selected_row) == 2) {
                         pawn_double_step = true;
                     }
 
                     // Détection de la capture en passant :
                     // destination vide + déplacement diagonal + pion adverse réellement présent
-                    if (game_state.board[row][col] == 0 && selected_piece_y != col) {
+                    if (game_state.board[target_row][target_col] == 0 && selected_col != target_col) {
                         int expected_captured_piece = (piece == 1) ? 7 : 1;
 
-                        en_passant_captured_row = selected_piece_x;
-                        en_passant_captured_piece = game_state.board[en_passant_captured_row][col];
+                        en_passant_captured_row = selected_row;
+                        en_passant_captured_piece = game_state.board[en_passant_captured_row][target_col];
 
                         if (en_passant_captured_piece == expected_captured_piece) {
                             en_passant_capture = true;
 
-                            game_state.board[en_passant_captured_row][col] = 0;
+                            game_state.board[en_passant_captured_row][target_col] = 0;
 
                             if (piece == 1) {
-                                game_state.capture_en_passant_blanc = true;
+                                game_state.white_en_passant_capture = true;
                             } else if (piece == 7) {
-                                game_state.capture_en_passant_noir = true;
+                                game_state.black_en_passant_capture = true;
                             }
                         }
                     }
 
                     // On simule le déplacement du pion
-                    game_state.board[selected_piece_x][selected_piece_y] = 0;
-                    game_state.board[row][col] = piece;
-                    simul = true;
+                    game_state.board[selected_row][selected_col] = 0;
+                    game_state.board[target_row][target_col] = piece;
+                    move_simulated = true;
                 }
             } else if (piece == 5 || piece == 11) {  // Dame
-                if (is_valid_queen_move(selected_piece_x, selected_piece_y, row, col)) {
+                if (is_valid_queen_move(selected_row, selected_col, target_row, target_col)) {
                     // On simule le déplacement de la dame
-                    temp_piece = game_state.board[row][col];
-                    game_state.board[selected_piece_x][selected_piece_y] = 0;
-                    game_state.board[row][col] = piece;
-                    simul = true;
+                    temp_piece = game_state.board[target_row][target_col];
+                    game_state.board[selected_row][selected_col] = 0;
+                    game_state.board[target_row][target_col] = piece;
+                    move_simulated = true;
                 }
             } else if (piece == 4 || piece == 10) {  // Fou
-                if (is_valid_bishop_move(selected_piece_x, selected_piece_y, row, col)) {
+                if (is_valid_bishop_move(selected_row, selected_col, target_row, target_col)) {
                     // On simule le déplacement du fou
-                    temp_piece = game_state.board[row][col];
-                    game_state.board[selected_piece_x][selected_piece_y] = 0;
-                    game_state.board[row][col] = piece;
-                    simul = true;
+                    temp_piece = game_state.board[target_row][target_col];
+                    game_state.board[selected_row][selected_col] = 0;
+                    game_state.board[target_row][target_col] = piece;
+                    move_simulated = true;
                 }
             } else if (piece == 2 || piece == 8) {  // Tour
-                if (is_valid_rook_move(selected_piece_x, selected_piece_y, row, col)) {
+                if (is_valid_rook_move(selected_row, selected_col, target_row, target_col)) {
                     // On simule le déplacement de la tour
-                    temp_piece = game_state.board[row][col];
-                    game_state.board[selected_piece_x][selected_piece_y] = 0;
-                    game_state.board[row][col] = piece;
-                    simul = true;
+                    temp_piece = game_state.board[target_row][target_col];
+                    game_state.board[selected_row][selected_col] = 0;
+                    game_state.board[target_row][target_col] = piece;
+                    move_simulated = true;
                 }
             } else if (piece == 3 || piece == 9) {  // Cavalier
-                if (is_valid_knight_move(selected_piece_x, selected_piece_y, row, col)) {
+                if (is_valid_knight_move(selected_row, selected_col, target_row, target_col)) {
                     // On simule le déplacement du cavalier
-                    temp_piece = game_state.board[row][col];
-                    game_state.board[selected_piece_x][selected_piece_y] = 0;
-                    game_state.board[row][col] = piece;
-                    simul = true;
+                    temp_piece = game_state.board[target_row][target_col];
+                    game_state.board[selected_row][selected_col] = 0;
+                    game_state.board[target_row][target_col] = piece;
+                    move_simulated = true;
                 }
             } else if (piece == 6 || piece == 12) {  // Roi
-                if (is_valid_king_move(selected_piece_x, selected_piece_y, row, col)) {
+                if (is_valid_king_move(selected_row, selected_col, target_row, target_col)) {
                     // On simule le déplacement du roi
-                    temp_piece = game_state.board[row][col];
-                    game_state.board[selected_piece_x][selected_piece_y] = 0;
-                    game_state.board[row][col] = piece;
-                    simul = true;
+                    temp_piece = game_state.board[target_row][target_col];
+                    game_state.board[selected_row][selected_col] = 0;
+                    game_state.board[target_row][target_col] = piece;
+                    move_simulated = true;
 
-                } else if (row - selected_piece_x == 0 && abs(selected_piece_y - col) == 2) {
-                    if (is_castling_valid(piece, col)) {
-                        // On applique réellement le roque ici, et non plus dans is_castling_valid()
-                        temp_piece = game_state.board[row][col];
+                } else if (target_row - selected_row == 0 && abs(selected_col - target_col) == 2) {
+                    if (is_valid_castling_move(piece, target_col)) {
+                        // On applique réellement le roque ici, et non plus dans is_valid_castling_move()
+                        temp_piece = game_state.board[target_row][target_col];
 
                         castling_move = true;
                         castling_rook_piece = (piece == 6) ? 2 : 8;
 
-                        if (col == 6) { // Roque court
+                        if (target_col == 6) { // Roque court
                             castling_rook_start_col = 7;
                             castling_rook_end_col = 5;
-                        } else if (col == 2) { // Roque long
+                        } else if (target_col == 2) { // Roque long
                             castling_rook_start_col = 0;
                             castling_rook_end_col = 3;
                         }
 
                         // Déplacer le roi
-                        game_state.board[selected_piece_x][selected_piece_y] = 0;
-                        game_state.board[row][col] = piece;
+                        game_state.board[selected_row][selected_col] = 0;
+                        game_state.board[target_row][target_col] = piece;
 
                         // Déplacer la tour
-                        game_state.board[selected_piece_x][castling_rook_start_col] = 0;
-                        game_state.board[selected_piece_x][castling_rook_end_col] = castling_rook_piece;
+                        game_state.board[selected_row][castling_rook_start_col] = 0;
+                        game_state.board[selected_row][castling_rook_end_col] = castling_rook_piece;
 
-                        simul = true;
+                        move_simulated = true;
                     }
                 }
             }
-            if (simul) {
+            if (move_simulated) {
                 bool king_in_check_after_move = is_king_in_check();
 
                 if (!king_in_check_after_move) { // Si le joueur a joué et que son roi n'est pas en échec, on valide le coup et on change la couleur du tour de jeu
                     // Si une tour a été bougée, on doit empêcher le mouvement de roque avec cette tour
-                    if (selected_piece_x == 7 && selected_piece_y == 0 && piece == 2) {
-                        white_rook1_moved = true;
-                    } else if (selected_piece_x == 7 && selected_piece_y == 7 && piece == 2) {
-                        white_rook2_moved = true;
-                    } else if (selected_piece_x == 0 && selected_piece_y == 0 && piece == 8) {
-                        black_rook1_moved = true;
-                    } else if (selected_piece_x == 0 && selected_piece_y == 7 && piece == 8) {
-                        black_rook2_moved = true;
+                    if (selected_row == 7 && selected_col == 0 && piece == 2) {
+                        white_queenside_rook_moved = true;
+                    } else if (selected_row == 7 && selected_col == 7 && piece == 2) {
+                        white_kingside_rook_moved = true;
+                    } else if (selected_row == 0 && selected_col == 0 && piece == 8) {
+                        black_queenside_rook_moved = true;
+                    } else if (selected_row == 0 && selected_col == 7 && piece == 8) {
+                        black_kingside_rook_moved = true;
                     // Si un roi a été bougé, on doit empêcher le mouvement de roque avec ce roi
-                    } else if (selected_piece_x == 7 && selected_piece_y == 4 && piece == 6) {
+                    } else if (selected_row == 7 && selected_col == 4 && piece == 6) {
                         white_king_moved = true;
-                    } else if (selected_piece_x == 0 && selected_piece_y == 4 && piece == 12) {
+                    } else if (selected_row == 0 && selected_col == 4 && piece == 12) {
                         black_king_moved = true;
                     }
 
                     // Si le coup validé est un roque, on marque aussi la tour correspondante comme bougée
                     if (castling_move) {
                         if (piece == 6) { // Roi blanc
-                            if (col == 6) {
-                                white_rook2_moved = true;
-                            } else if (col == 2) {
-                                white_rook1_moved = true;
+                            if (target_col == 6) {
+                                white_kingside_rook_moved = true;
+                            } else if (target_col == 2) {
+                                white_queenside_rook_moved = true;
                             }
                         } else if (piece == 12) { // Roi noir
-                            if (col == 6) {
-                                black_rook2_moved = true;
-                            } else if (col == 2) {
-                                black_rook1_moved = true;
+                            if (target_col == 6) {
+                                black_kingside_rook_moved = true;
+                            } else if (target_col == 2) {
+                                black_queenside_rook_moved = true;
                             }
                         }
                     }
@@ -870,40 +867,39 @@ bool handle_move_from_client(int player_socket) {
                     // Si un pion vient de faire un double pas, on mémorise la colonne pour l'en passant
                     if (pawn_double_step) {
                         if (piece == 1) {
-                            game_state.en_passant_blanc = col;
+                            game_state.white_en_passant_col = target_col;
                         } else if (piece == 7) {
-                            game_state.en_passant_noir = col;
+                            game_state.black_en_passant_col = target_col;
                         }
                     }
 
                     // On fait la promotion du pion si elle a lieu
-                    if ((piece == 1 && row == 0) || (piece == 7 && row == 7)) {
-                        game_state.board[row][col] = get_promotion_piece(piece, game_state.promotion_piece);
+                    if ((piece == 1 && target_row == 0) || (piece == 7 && target_row == 7)) {
+                        game_state.board[target_row][target_col] = get_promotion_piece(piece, game_state.promotion_piece);
                     }
 
                     // On change les variables de tour
                     game_state.is_white_turn = !game_state.is_white_turn;
-                    play = true;
-                    simul = false;
+                    move_simulated = false;
                     game_state.move_valid = true;
 
                     // Teste si le joueur à qui ça va être le tour de jouer est en échec et mat
                     if (is_checkmate()) {
                         printf("Is checkmate !!!\n");
                         game_state.game_over = true;
-                        selected_piece_x = -1;
-                        selected_piece_y = -1;
+                        selected_row = -1;
+                        selected_col = -1;
                         return true;
                     }
 
-                    selected_piece_x = -1;
-                    selected_piece_y = -1;
+                    selected_row = -1;
+                    selected_col = -1;
                     return true;
 
                 } else { // Si le joueur a joué mais que son roi est en échec, le tour recommence
                     // Annuler la capture en passant si elle avait été simulée
                     if (en_passant_capture && en_passant_captured_row != -1) {
-                        game_state.board[en_passant_captured_row][col] = en_passant_captured_piece;
+                        game_state.board[en_passant_captured_row][target_col] = en_passant_captured_piece;
                     }
 
                     // Annuler la tour si un roque avait été simulé
@@ -911,25 +907,25 @@ bool handle_move_from_client(int player_socket) {
                         castling_rook_start_col != -1 &&
                         castling_rook_end_col != -1) {
 
-                        game_state.board[selected_piece_x][castling_rook_end_col] = 0;
-                        game_state.board[selected_piece_x][castling_rook_start_col] = castling_rook_piece;
+                        game_state.board[selected_row][castling_rook_end_col] = 0;
+                        game_state.board[selected_row][castling_rook_start_col] = castling_rook_piece;
                     }
 
                     // Annuler le coup joué
-                    game_state.board[row][col] = temp_piece;
-                    game_state.board[selected_piece_x][selected_piece_y] = piece;
+                    game_state.board[target_row][target_col] = temp_piece;
+                    game_state.board[selected_row][selected_col] = piece;
 
-                    game_state.capture_en_passant_blanc = false;
-                    game_state.capture_en_passant_noir = false;
-                    simul = false;
+                    game_state.white_en_passant_capture = false;
+                    game_state.black_en_passant_capture = false;
+                    move_simulated = false;
                     game_state.move_valid = false;
                 }
             }
         }
 
         // Réinitialiser la sélection de pièce pour le tour du joueur suivant
-        selected_piece_x = -1;
-        selected_piece_y = -1;
+        selected_row = -1;
+        selected_col = -1;
     }
 
     return false;
@@ -945,42 +941,42 @@ void handle_clients(int client1_socket, int client2_socket) {
     send_game_state_to_client(client2_socket);
 
     // Variables pour gérer l'alternance du tour de jeu
-    int client_socket[2] = {client1_socket, client2_socket};
-    int player_socket = 0;
+    int client_sockets[2] = {client1_socket, client2_socket};
+    int current_player_index = 0;
     int other_player_socket = 1;
 
     while (1) {
         // Reception du coup du joueur à qui c'est le tour de jouer
-        if (receive_game_state_from_client(client_socket[player_socket]) < 0) {
+        if (receive_move_request_from_client(client_sockets[current_player_index]) < 0) {
             break;
         }
 
-        bool valid_move = handle_move_from_client(player_socket);
+        bool valid_move = handle_move_from_client(current_player_index);
 
         if (!valid_move) {
-            printf("Coup invalide reçu du joueur %d. Le même joueur rejoue.\n", player_socket + 1);
+            printf("Coup invalide reçu du joueur %d. Le même joueur rejoue.\n", current_player_index + 1);
             game_state.move_valid = false;
-            send_game_state_to_client(client_socket[player_socket]);
+            send_game_state_to_client(client_sockets[current_player_index]);
             continue;
         }
 
-        printf("Coup valide reçu du joueur %d.\n", player_socket + 1);
+        printf("Coup valide reçu du joueur %d.\n", current_player_index + 1);
         game_state.move_valid = true;
 
         // Le joueur qui a joué reçoit aussi la réponse de légalité et le plateau officiel.
-        send_game_state_to_client(client_socket[player_socket]);
+        send_game_state_to_client(client_sockets[current_player_index]);
 
         // L'autre joueur reçoit le même plateau; son client l'inversera pour l'affichage.
-        send_game_state_to_client(client_socket[other_player_socket]);
+        send_game_state_to_client(client_sockets[other_player_socket]);
 
         // Si game_over == True
         if (game_state.game_over == true) {
-            if (receive_game_state_from_client(client_socket[player_socket]) < 0) {
+            if (receive_move_request_from_client(client_sockets[current_player_index]) < 0) {
                 break;
             }
             int restart_choice_player_socket = game_state.restart_choice;
 
-            if (receive_game_state_from_client(client_socket[other_player_socket]) < 0) {
+            if (receive_move_request_from_client(client_sockets[other_player_socket]) < 0) {
                 break;
             }
             int restart_choice_other_player_socket = game_state.restart_choice;
@@ -995,7 +991,7 @@ void handle_clients(int client1_socket, int client2_socket) {
                 send_game_state_to_client(client2_socket);
 
                 // Changement du tour de joueur pour bien recommencer une partie
-                player_socket = 0;
+                current_player_index = 0;
                 other_player_socket = 1;
             } else {
                 game_state.game_over = false;
@@ -1006,7 +1002,7 @@ void handle_clients(int client1_socket, int client2_socket) {
             }
         } else {
             // Changement du tour de joueur uniquement si le coup était valide
-            player_socket = 1 - player_socket;
+            current_player_index = 1 - current_player_index;
             other_player_socket = 1 - other_player_socket;
         }
     }
